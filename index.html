@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Interactive Media Manager (with Signup/Login + Google Drive DB)</title>
+  <style>
+    :root{--accent:#ff8a00;--muted:#666}
+    body{font-family:Inter,system-ui,Segoe UI,Arial;margin:0;background:#f6f7fb;color:#222}
+    header{background:linear-gradient(90deg,#fff 0%,#f3f7ff 100%);padding:18px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 6px rgba(10,10,30,.06)}
+    h1{margin:0;font-size:18px}
+    .container{display:grid;grid-template-columns:260px 1fr;gap:18px;padding:18px}
+    nav{background:#fff;border-radius:12px;padding:12px;height:calc(100vh - 120px);box-shadow:0 6px 18px rgba(20,20,50,.06);overflow:auto}
+    nav button{display:block;margin:8px 0;padding:10px;border-radius:10px;border:0;background:transparent;text-align:left;width:100%;cursor:pointer}
+    nav button.active{background:linear-gradient(90deg,var(--accent),#ffb86b);color:#fff}
+    main{min-height:80vh}
+    .card{background:#fff;padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(20,20,50,.04);margin-bottom:16px}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .uploader{display:flex;gap:8px;align-items:center}
+    input[type=file]{display:block}
+    .gallery{display:flex;flex-wrap:wrap;gap:10px}
+    .thumb{width:150px;height:100px;object-fit:cover;border-radius:8px;cursor:pointer;border:2px solid transparent}
+    .thumb.selected{border-color:var(--accent)}
+    footer{padding:18px;text-align:center;color:var(--muted)}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    .stat{display:flex;align-items:center;gap:8px;padding:8px;background:#fff;border-radius:10px}
+    /* editor canvas */
+    #photoCanvas{max-width:100%;border-radius:8px;background:#ddd}
+    label{display:block;margin:6px 0;font-weight:600}
+    .small{font-size:13px;color:var(--muted)}
+    /* responsive */
+    @media (max-width:900px){.container{grid-template-columns:1fr;}
+      nav{height:auto}
+    }
+
+    /* LOGIN MODAL */
+    .modal{position:fixed;inset:0;background:rgba(10,10,20,.45);display:flex;align-items:center;justify-content:center}
+    .modal .panel{background:#fff;padding:18px;border-radius:12px;width:360px;box-shadow:0 10px 40px rgba(0,0,0,.2)}
+    .modal input{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px solid #ddd}
+    .hint{font-size:13px;color:#666;margin-top:8px}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Interactive Media Manager</h1>
+    <div class="controls">
+      <div class="stat">📸 Photos: <span id="statPhotos">0</span></div>
+      <div class="stat">🎥 Videos: <span id="statVideos">0</span></div>
+      <div class="stat">🎵 Songs: <span id="statSongs">0</span></div>
+      <div style="margin-left:8px">
+        <button id="btnSignIn">Sign in</button>
+        <button id="btnSignOut" style="display:none">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="container">
+    <nav>
+      <button id="btnDashboard" class="active">Dashboard</button>
+      <button id="btnPhotos">Photos</button>
+      <button id="btnVideos">Videos</button>
+      <button id="btnMusic">MP3 Songs</button>
+      <button id="btnContacts">Contacts</button>
+      <button id="btnEditors">Editors</button>
+    </nav>
+
+    <main>
+      <!-- DASHBOARD -->
+      <section id="dashboard" class="card">
+        <h2>Dashboard</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h3>Quick Upload</h3>
+            <div class="uploader">
+              <input id="quickFiles" type="file" multiple accept="image/*,video/*,audio/*" />
+              <button id="quickUploadBtn">Upload</button>
+            </div>
+            <p class="small">Drop files or pick to add them to the library (saved to Google Drive appData or browser during session).</p>
+          </div>
+
+          <div class="card">
+            <h3>Quick Preview</h3>
+            <div id="quickPreviewArea">No file selected</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PHOTOS -->
+      <section id="photos" class="card" style="display:none">
+        <h2>Photos</h2>
+        <div>
+          <label>Add photos</label>
+          <input id="photoInput" type="file" accept="image/*" multiple />
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="gallery" id="photoGallery"></div>
+        </div>
+
+        <div id="photoEditorCard" class="card" style="display:none;margin-top:12px">
+          <h3>Photo Editor</h3>
+          <div class="grid-2">
+            <div>
+              <canvas id="photoCanvas" width="800" height="500"></canvas>
+            </div>
+            <div>
+              <label>Rotate</label>
+              <button id="rotateLeft">⟲</button>
+              <button id="rotateRight">⟳</button>
+
+              <label>Crop (select area on canvas then press Crop)</label>
+              <button id="startCrop">Start Selection</button>
+              <button id="doCrop">Crop</button>
+
+              <label>Filters</label>
+              <div>
+                <label>Brightness <input id="brightness" type="range" min="0" max="2" step="0.01" value="1"/></label>
+                <label>Contrast <input id="contrast" type="range" min="0" max="2" step="0.01" value="1"/></label>
+                <label>Grayscale <input id="grayscale" type="range" min="0" max="1" step="0.01" value="0"/></label>
+              </div>
+
+              <div style="margin-top:10px" class="controls">
+                <button id="downloadPhoto">Download Edited</button>
+                <button id="resetPhoto">Reset</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIDEOS -->
+      <section id="videos" class="card" style="display:none">
+        <h2>Videos</h2>
+        <label>Add videos</label>
+        <input id="videoInput" type="file" accept="video/*" multiple />
+
+        <div id="videoList" style="margin-top:12px"></div>
+
+        <div id="videoEditorCard" class="card" style="display:none;margin-top:12px">
+          <h3>Video Player & Simple Trimmer</h3>
+          <video id="videoPlayer" controls style="max-width:100%"></video>
+          <div style="margin-top:8px">
+            <label>Start: <input id="trimStart" type="number" min="0" value="0" step="0.1"/></label>
+            <label>End: <input id="trimEnd" type="number" min="0" value="0" step="0.1"/></label>
+            <button id="captureTrim">Record Trim (records playback between times)</button>
+            <a id="downloadTrim" style="display:none">Download Trim</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- MUSIC -->
+      <section id="music" class="card" style="display:none">
+        <h2>MP3 Songs</h2>
+        <label>Add songs</label>
+        <input id="audioInput" type="file" accept="audio/*" multiple />
+        <div id="playlist" style="margin-top:12px"></div>
+        <audio id="audioPlayer" controls style="width:100%;margin-top:8px"></audio>
+      </section>
+
+      <!-- CONTACTS -->
+      <section id="contacts" class="card" style="display:none">
+        <h2>Contacts</h2>
+        <form id="contactForm">
+          <input id="cName" placeholder="Name" required />
+          <input id="cPhone" placeholder="Phone/Email" required />
+          <button type="submit">Add / Update</button>
+        </form>
+        <div id="contactsList" style="margin-top:8px"></div>
+      </section>
+
+      <!-- EDITORS -->
+      <section id="editors" class="card" style="display:none">
+        <h2>Editors</h2>
+        <p class="small">Photo editor is available under Photos. Video editing here is a simple recorder-based trimmer — for advanced editing use server-side tools or ffmpeg.wasm integration.</p>
+        <div class="card">
+          <h3>Included Photo (sample)</h3>
+          <p class="small">Replace the path with your image path if it doesn't load here.</p>
+          <img id="includedPhoto" src="/mnt/data/WhatsApp Image 2025-11-17 at 1.44.41 PM.jpeg" alt="included" style="max-width:320px;border-radius:8px"/>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <footer>Built with vanilla HTML/CSS/JS — data stored in Google Drive appData when signed in, otherwise in-memory demo</footer>
+
+  <!-- LOGIN / SIGNUP MODAL (appears when not signed in) -->
+  <div id="authModal" class="modal" style="display:none">
+    <div class="panel">
+      <h3 id="authTitle">Sign in</h3>
+      <input id="authEmail" placeholder="Email" type="email" />
+      <input id="authPassword" placeholder="Password" type="password" />
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="authSubmit">Sign in</button>
+        <button id="authToggle">Switch to Sign up</button>
+      </div>
+      <div class="hint">This demo stores an app DB file in your Google Drive <strong>appDataFolder</strong> when signed in. You must create OAuth client credentials and set CLIENT_ID below.</div>
+    </div>
+  </div>
+
+  <script>
+    // -------------------------
+    // IMPORTANT: before using Drive features, create a Google Cloud Project and an OAuth 2.0 Client ID (Web app).
+    // - Enable Drive API
+    // - Use OAuth client ID and set the authorized origins to where you host this page.
+    // - Replace CLIENT_ID below with your OAuth 2.0 client ID.
+    // This demo uses the Drive appDataFolder scope to store a small JSON "app_db.json" which contains user accounts and references to files.
+    // -------------------------
+
+    const CLIENT_ID = 'REPLACE_WITH_YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com';
+    const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+
+    // Simple UI routing
+    const sections = {dashboard: document.getElementById('dashboard'), photos: document.getElementById('photos'), videos: document.getElementById('videos'), music: document.getElementById('music'), contacts: document.getElementById('contacts'), editors: document.getElementById('editors')}
+    function show(id){Object.values(sections).forEach(s=>s.style.display='none'); sections[id].style.display='block'; document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active')); document.getElementById('btn'+id.charAt(0).toUpperCase()+id.slice(1)).classList.add('active')}
+    document.getElementById('btnDashboard').onclick=_=>show('dashboard')
+    document.getElementById('btnPhotos').onclick=_=>show('photos')
+    document.getElementById('btnVideos').onclick=_=>show('videos')
+    document.getElementById('btnMusic').onclick=_=>show('music')
+    document.getElementById('btnContacts').onclick=_=>show('contacts')
+    document.getElementById('btnEditors').onclick=_=>show('editors')
+
+    // State
+    const state = {photos:[], videos:[], songs:[], contacts:[]}
+    const statPhotos = document.getElementById('statPhotos'), statVideos = document.getElementById('statVideos'), statSongs = document.getElementById('statSongs')
+    function updateStats(){statPhotos.textContent = state.photos.length; statVideos.textContent = state.videos.length; statSongs.textContent = state.songs.length}
+
+    // Auth UI elements
+    const authModal = document.getElementById('authModal'), authTitle = document.getElementById('authTitle'), authEmail = document.getElementById('authEmail'), authPassword = document.getElementById('authPassword'), authSubmit = document.getElementById('authSubmit'), authToggle = document.getElementById('authToggle')
+    const btnSignIn = document.getElementById('btnSignIn'), btnSignOut = document.getElementById('btnSignOut')
+
+    // Simple client-side session (for demo). "currentUser" will hold the email.
+    let currentUser = localStorage.getItem('imm_currentUser') || null;
+    let googleAccessToken = null; // obtained after OAuth
+
+    // Show auth modal if no current user
+    function showAuthModal(mode='signin'){ authModal.style.display='flex'; authTitle.textContent = mode==='signin' ? 'Sign in' : 'Sign up'; authSubmit.textContent = mode==='signin' ? 'Sign in' : 'Sign up'; authToggle.textContent = mode==='signin' ? 'Switch to Sign up' : 'Switch to Sign in'; authModal.dataset.mode = mode }
+    authToggle.onclick = ()=>{ showAuthModal(authModal.dataset.mode === 'signin' ? 'signup' : 'signin') }
+
+    // crypto helpers: generate salt, hash password with PBKDF2
+    async function generateSalt(){ const s = crypto.getRandomValues(new Uint8Array(16)); return btoa(String.fromCharCode(...s)) }
+    async function hashPassword(password, salt){ const enc = new TextEncoder(); const passKey = await crypto.subtle.importKey('raw', enc.encode(password), {name:'PBKDF2'}, false, ['deriveBits']); const derived = await crypto.subtle.deriveBits({name:'PBKDF2', salt: enc.encode(salt), iterations: 100000, hash: 'SHA-256'}, passKey, 256); return btoa(String.fromCharCode(...new Uint8Array(derived))) }
+
+    // Drive helpers (uses fetch)
+    async function driveRequest(path, method='GET', body=null, params={}){
+      if(!googleAccessToken) throw new Error('Not signed into Google');
+      let url = 'https://www.googleapis.com/drive/v3' + path;
+      if(Object.keys(params).length) url += '?' + new URLSearchParams(params).toString();
+      const res = await fetch(url, {method, headers: {Authorization: 'Bearer '+googleAccessToken}, body});
+      if(!res.ok) throw new Error('Drive API error: '+res.status+ ' ' + await res.text());
+      return res.json().catch(()=>null);
+    }
+
+    // app DB file name in appDataFolder
+    const APP_DB_NAME = 'imm_app_db.json';
+
+    // load app DB from Drive appDataFolder (if exists) or return default structure
+    async function loadAppDb(){ try{
+        // list files in appDataFolder with name
+        const list = await driveRequest('/files', 'GET', null, {spaces:'appDataFolder', q: `name='${APP_DB_NAME}'`, fields:'files(id,name)'});
+        if(list.files && list.files.length){ const id = list.files[0].id; const res = await fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media', {headers:{Authorization:'Bearer '+googleAccessToken}}); const json = await res.json(); return json }
+        return {users:[], files:[]};
+      }catch(e){ console.warn('Could not load app DB from Drive (not signed or error) - using in-memory',e); return {users:[], files:[]} }
+    }
+
+    // save app DB (either create or update)
+    async function saveAppDb(db){ try{
+        // check existing
+        const list = await driveRequest('/files','GET',null,{spaces:'appDataFolder', q:`name='${APP_DB_NAME}'`, fields:'files(id,name)'});
+        const blob = new Blob([JSON.stringify(db)], {type:'application/json'});
+        if(list.files && list.files.length){ const id=list.files[0].id; // update
+          const form = new FormData(); form.append('metadata', new Blob([JSON.stringify({name: APP_DB_NAME})], {type:'application/json'})); form.append('file', blob);
+          const res = await fetch('https://www.googleapis.com/upload/drive/v3/files/'+id+'?uploadType=multipart', {method:'PATCH', headers:{Authorization:'Bearer '+googleAccessToken}, body:form}); if(!res.ok) throw new Error('Failed to update DB'); return await res.json();
+        }else{ const form = new FormData(); form.append('metadata', new Blob([JSON.stringify({name: APP_DB_NAME, parents:['appDataFolder']})], {type:'application/json'})); form.append('file', blob); const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {method:'POST', headers:{Authorization:'Bearer '+googleAccessToken}, body:form}); if(!res.ok) throw new Error('Failed to create DB'); return await res.json(); }
+      }catch(e){ console.warn('Could not save app DB to Drive', e); throw e }
+    }
+
+    // Sign-in with Google (popup oauth using google accounts endpoint implied)
+    // We implement the OAuth 2.0 implicit flow using a popup to get an access_token (for demo only).
+    async function googleSignIn(){ if(CLIENT_ID.startsWith('REPLACE')) return alert('Set CLIENT_ID in the script before using Google Drive features.');
+      const scope = encodeURIComponent(DRIVE_SCOPE);
+      const redirect = location.origin + location.pathname; // must be an authorized origin for your OAuth client
+      const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&response_type=token&scope=${scope}&redirect_uri=${redirect}&prompt=consent&access_type=online`;
+      // open popup
+      const w = window.open(url,'_blank','width=600,height=700');
+      return new Promise((resolve,reject)=>{
+        const timer = setInterval(()=>{
+          try{
+            if(!w || w.closed){ clearInterval(timer); reject(new Error('Popup closed')) }
+            // check if popup redirected to same origin
+            if(w.location && w.location.href.indexOf(redirect)===0){ const hash = w.location.hash; const m = hash.match(/access_token=([^&]+)/); if(m){ googleAccessToken = decodeURIComponent(m[1]); w.close(); clearInterval(timer); resolve(googleAccessToken); } }
+          }catch(err){}
+        },500);
+      });
+    }
+
+    // Sign out
+    function signOut(){ currentUser=null; localStorage.removeItem('imm_currentUser'); btnSignIn.style.display='inline-block'; btnSignOut.style.display='none'; alert('Signed out locally. Note: Google token (if any) will expire based on OAuth session.'); }
+
+    btnSignOut.onclick = ()=>{ signOut(); }
+
+    btnSignIn.onclick = async ()=>{ // show modal sign in form (local accounts + Google optional)
+      showAuthModal('signin'); authEmail.value=''; authPassword.value='';
+    }
+
+    authSubmit.onclick = async ()=>{
+      const mode = authModal.dataset.mode || 'signin'; const email = authEmail.value.trim().toLowerCase(); const pass = authPassword.value;
+      if(!email || !pass) return alert('Provide email and password');
+      // if user chooses to sign in with Google (optional), perform googleSignIn first
+      try{
+        // attempt to load DB from Drive if user chooses to "Use Google" - for simplicity we'll ask the user via a confirm
+        let useDrive = confirm('Do you want to use Google Drive for storage and account DB? (OK = Yes)');
+        if(useDrive){ await googleSignIn(); }
+        // load db (either from drive or localStorage)
+        let db = {users:[], files:[]};
+        if(useDrive && googleAccessToken){ db = await loadAppDb(); }
+        else{ const raw = localStorage.getItem('imm_local_db'); if(raw) db = JSON.parse(raw); }
+
+        if(mode === 'signup'){
+          // create account
+          if(db.users.find(u=>u.email===email)) return alert('Account already exists');
+          const salt = await generateSalt(); const ph = await hashPassword(pass,salt);
+          db.users.push({email, salt, hash: ph});
+          if(useDrive && googleAccessToken){ await saveAppDb(db); } else { localStorage.setItem('imm_local_db', JSON.stringify(db)); }
+          currentUser = email; localStorage.setItem('imm_currentUser', email); authModal.style.display='none'; btnSignIn.style.display='none'; btnSignOut.style.display='inline-block'; alert('Signed up and signed in');
+        }else{
+          // signin
+          const user = db.users.find(u=>u.email===email);
+          if(!user) return alert('No such user (check email or sign up first)');
+          const ph = await hashPassword(pass,user.salt);
+          if(ph !== user.hash) return alert('Incorrect password');
+          currentUser = email; localStorage.setItem('imm_currentUser', email); authModal.style.display='none'; btnSignIn.style.display='none'; btnSignOut.style.display='inline-block'; alert('Signed in');
+        }
+      }catch(e){ console.error(e); alert('Authentication failed: '+e.message) }
+    }
+
+    // PHOTOS (basic client-side functionality preserved)
+    const photoInput = document.getElementById('photoInput'), photoGallery = document.getElementById('photoGallery')
+    photoInput.onchange = e => handleFiles(e.target.files)
+
+    // Quick upload
+    document.getElementById('quickUploadBtn').onclick = ()=>{const f = document.getElementById('quickFiles').files; handleFiles(f)}
+
+    async function handleFiles(fileList){
+      for(const f of fileList){
+        const t=f.type; const reader=new FileReader(); reader.onload=function(e){const url=e.target.result; if(t.startsWith('image/')){state.photos.push({name:f.name,data:url}); renderPhotos();} else if(t.startsWith('video/')){state.videos.push({name:f.name,data:url}); renderVideos()} else if(t.startsWith('audio/')){state.songs.push({name:f.name,data:url}); renderSongs()} updateStats();}; reader.readAsDataURL(f);
+        // attempt to upload to drive in background (if signed into Google)
+        if(googleAccessToken){ try{ await uploadFileToAppData(f); }catch(e){ console.warn('Upload failed', e) } }
+      }
+    }
+
+    // upload arbitrary file to appDataFolder and store metadata in DB
+    async function uploadFileToAppData(file){ if(!googleAccessToken) throw new Error('Not signed in to Google');
+      // create multipart upload
+      const metadata = {name: file.name, parents: ['appDataFolder']};
+      const form = new FormData(); form.append('metadata', new Blob([JSON.stringify(metadata)], {type:'application/json'})); form.append('file', file);
+      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {method:'POST', headers:{Authorization:'Bearer '+googleAccessToken}, body:form});
+      if(!res.ok) throw new Error('Upload failed: '+res.status);
+      const obj = await res.json();
+      // update DB
+      let db = {users:[], files:[]}; try{ db = await loadAppDb(); }catch(e){}
+      db.files.push({id: obj.id, name: obj.name, owner: currentUser || 'unknown', uploadedAt: new Date().toISOString()});
+      await saveAppDb(db);
+      return obj;
+    }
+
+    // Render helpers duplicated/merged: keep only one definition
+    function renderPhotos(){photoGallery.innerHTML=''; state.photos.forEach((p,idx)=>{const img=document.createElement('img'); img.src=p.data; img.className='thumb'; img.title=p.name; img.onclick=()=>selectPhoto(idx,img); photoGallery.appendChild(img);}); updateStats();}
+
+    // Photo editor
+    const canvas = document.getElementById('photoCanvas'), ctx = canvas.getContext('2d'); let currentPhotoIndex = null; let originalImage = null; let transform = {rot:0,scale:1}; let cropping=false, sel=null
+    function selectPhoto(i,el){currentPhotoIndex=i; document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('selected')); el.classList.add('selected'); show('photos'); document.getElementById('photoEditorCard').style.display='block'; loadImageToCanvas(state.photos[i].data)}
+    function loadImageToCanvas(src){const img=new Image(); img.onload=()=>{originalImage=img; // fit
+        canvas.width = Math.min(1200,img.width); canvas.height = Math.min(800,img.height);
+        drawImage();}; img.src=src;}
+    function drawImage(){ctx.save(); ctx.clearRect(0,0,canvas.width,canvas.height); ctx.translate(canvas.width/2, canvas.height/2); ctx.rotate(transform.rot*Math.PI/180); ctx.scale(transform.scale, transform.scale);
+      // draw centered
+      ctx.drawImage(originalImage, -originalImage.width/2, -originalImage.height/2);
+      ctx.restore(); applyFilters(); if(cropping && sel){ctx.strokeStyle='red'; ctx.lineWidth=2; ctx.strokeRect(sel.x,sel.y,sel.w,sel.h);} }
+
+    document.getElementById('rotateLeft').onclick = ()=>{transform.rot -= 90; drawImage()}
+    document.getElementById('rotateRight').onclick = ()=>{transform.rot += 90; drawImage()}
+    document.getElementById('brightness').oninput = applyFilters
+    document.getElementById('contrast').oninput = applyFilters
+    document.getElementById('grayscale').oninput = applyFilters
+
+    function applyFilters(){if(!originalImage) return; const b = parseFloat(document.getElementById('brightness').value), c = parseFloat(document.getElementById('contrast').value), g=parseFloat(document.getElementById('grayscale').value);
+      // basic pixel filter pipeline
+      const tmp = document.createElement('canvas'); tmp.width = canvas.width; tmp.height = canvas.height; const tctx = tmp.getContext('2d'); tctx.clearRect(0,0,tmp.width,tmp.height);
+      tctx.drawImage(canvas,0,0);
+      try{
+        const imgd = tctx.getImageData(0,0,tmp.width,tmp.height); const d = imgd.data;
+        for(let i=0;i<d.length;i+=4){ // brightness & contrast & grayscale
+          for(let k=0;k<3;k++){ let val = d[i+k]; val = ((val-128)*c)+128; val = val*b; d[i+k]=Math.max(0,Math.min(255,val)); }
+          if(g>0){ const gray = 0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]; d[i]=d[i] + (gray-d[i])*g; d[i+1]=d[i+1]+(gray-d[i+1])*g; d[i+2]=d[i+2]+(gray-d[i+2])*g; }
+        }
+        tctx.putImageData(imgd,0,0);
+        ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(tmp,0,0);
+        if(cropping && sel){ctx.strokeStyle='red'; ctx.lineWidth=2; ctx.strokeRect(sel.x,sel.y,sel.w,sel.h);}      
+      }catch(e){/* security if cross origin*/}
+    }
+
+    // simple cropping selection
+    document.getElementById('startCrop').onclick = ()=>{cropping=true; sel=null; canvas.style.cursor='crosshair'}
+    canvas.addEventListener('mousedown', e=>{if(!cropping) return; const r=canvas.getBoundingClientRect(); const x=e.clientX-r.left, y=e.clientY-r.top; sel={x,y,w:0,h:0,ox:x,oy:y};});
+    canvas.addEventListener('mousemove', e=>{if(!cropping || !sel) return; const r=canvas.getBoundingClientRect(); sel.w = e.clientX - r.left - sel.ox; sel.h = e.clientY - r.top - sel.oy; sel.x = Math.min(sel.ox, sel.ox+sel.w); sel.y = Math.min(sel.oy, sel.oy+sel.h); sel.w = Math.abs(sel.w); sel.h = Math.abs(sel.h); drawImage();});
+    document.getElementById('doCrop').onclick = ()=>{if(!sel) return; const imgd = ctx.getImageData(sel.x,sel.y,sel.w,sel.h); canvas.width = sel.w; canvas.height = sel.h; ctx.putImageData(imgd,0,0); cropping=false; sel=null; canvas.style.cursor='default'}
+
+    document.getElementById('downloadPhoto').onclick = ()=>{const a = document.createElement('a'); a.href = canvas.toDataURL('image/jpeg'); a.download = 'edited.jpg'; a.click();}
+    document.getElementById('resetPhoto').onclick = ()=>{if(!originalImage) return; transform = {rot:0,scale:1}; document.getElementById('brightness').value=1; document.getElementById('contrast').value=1; document.getElementById('grayscale').value=0; loadImageToCanvas(originalImage.src)}
+
+    // VIDEOS
+    const videoInput = document.getElementById('videoInput'), videoList = document.getElementById('videoList'), videoPlayer = document.getElementById('videoPlayer'), trimStart = document.getElementById('trimStart'), trimEnd = document.getElementById('trimEnd'), captureTrim = document.getElementById('captureTrim'), downloadTrim = document.getElementById('downloadTrim')
+    videoInput.onchange = e => handleFiles(e.target.files)
+    function renderVideos(){videoList.innerHTML=''; state.videos.forEach((v,i)=>{const d=document.createElement('div'); d.style.margin='8px 0'; d.innerHTML = `<button data-i="${i}">▶ ${v.name}</button>`; d.querySelector('button').onclick=()=>{loadVideo(i)}; videoList.appendChild(d);}); updateStats();}
+    function loadVideo(i){const v = state.videos[i]; videoPlayer.src = v.data; document.getElementById('videoEditorCard').style.display='block'; videoPlayer.onloadedmetadata = ()=>{trimEnd.value = videoPlayer.duration.toFixed(2);} }
+
+    captureTrim.onclick = async ()=>{
+      const start = parseFloat(trimStart.value)||0; const end = parseFloat(trimEnd.value)||videoPlayer.duration||10; if(end<=start) return alert('End must be after start');
+      try{
+        const stream = videoPlayer.captureStream(); const recorder = new MediaRecorder(stream); const chunks=[]; recorder.ondataavailable = e=>chunks.push(e.data); recorder.onstop = ()=>{ const blob = new Blob(chunks,{type:'video/webm'}); downloadTrim.href = URL.createObjectURL(blob); downloadTrim.download = 'trim.webm'; downloadTrim.style.display='inline-block'; downloadTrim.textContent='Download Trim'; }
+        recorder.start(); videoPlayer.currentTime = start; videoPlayer.play(); const wait = ()=> new Promise(res=>{ const onTime = ()=>{ if(videoPlayer.currentTime>=end-0.05){ videoPlayer.pause(); recorder.stop(); videoPlayer.removeEventListener('timeupdate', onTime); res(); } }; videoPlayer.addEventListener('timeupdate', onTime); }); await wait();
+      }catch(e){alert('Trimming failed in this browser.');}
+    }
+
+    // MUSIC
+    const audioInput = document.getElementById('audioInput'), playlist = document.getElementById('playlist'), audioPlayer = document.getElementById('audioPlayer')
+    audioInput.onchange = e => handleFiles(e.target.files)
+    function renderSongs(){playlist.innerHTML=''; state.songs.forEach((s,i)=>{const el=document.createElement('div'); el.innerHTML=`<button data-i="${i}">▶ ${s.name}</button>`; el.querySelector('button').onclick=()=>{audioPlayer.src=s.data; audioPlayer.play();}; playlist.appendChild(el);}); updateStats();}
+
+    // CONTACTS
+    const contactForm = document.getElementById('contactForm'), contactsList = document.getElementById('contactsList')
+    contactForm.onsubmit = e=>{e.preventDefault(); const name = document.getElementById('cName').value, phone = document.getElementById('cPhone').value; state.contacts.push({name,phone}); renderContacts(); contactForm.reset();}
+    function renderContacts(){contactsList.innerHTML=''; state.contacts.forEach((c,i)=>{const d=document.createElement('div'); d.className='card'; d.style.margin='6px 0'; d.innerHTML=`<strong>${c.name}</strong><div class='small'>${c.phone}</div><div style='margin-top:6px'><button data-i='${i}' class='del'>Delete</button></div>`; d.querySelector('.del').onclick=()=>{state.contacts.splice(i,1); renderContacts();}; contactsList.appendChild(d);}); }
+
+    // Try to load included sample photo
+    (function tryLoadIncluded(){const sample = document.getElementById('includedPhoto'); if(sample && sample.src){ const img = new Image(); img.onload = ()=>{state.photos.push({name:'included.jpg',data:sample.src}); renderPhotos();}; img.onerror = ()=>{}; img.src = sample.src; } })();
+
+    // small UX
+    photoGallery.addEventListener('click', e=>{});
+
+    // If there's a remembered currentUser, show signed-in UI
+    if(currentUser){ btnSignIn.style.display='none'; btnSignOut.style.display='inline-block'; }
+
+    // Notes: This is a demo-level integration. Important security notes:
+    // - Storing passwords client-side is insecure for production. Use a proper backend + authentication provider (Firebase Auth, Auth0, NextAuth, etc.) for real apps.
+    // - The OAuth flow used here is a simple popup implicit flow for demo. For production use, follow OAuth 2.0 best practices (authorization code flow with PKCE).
+    // - Drive appDataFolder is handy for per-user hidden storage. Files in appDataFolder are only accessible by your app (when authorized).
+    // - Always protect sensitive data and never rely on client-only protection for real user secrets.
+  </script>
+</body>
+</html>
